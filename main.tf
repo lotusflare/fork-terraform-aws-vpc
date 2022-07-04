@@ -20,19 +20,31 @@ locals {
 resource "aws_vpc" "this" {
   count = local.create_vpc ? 1 : 0
 
-  cidr_block                       = var.cidr
+  cidr_block                       = var.ipv4_netmask_length == null ? var.cidr : null
   instance_tenancy                 = var.instance_tenancy
   enable_dns_hostnames             = var.enable_dns_hostnames
   enable_dns_support               = var.enable_dns_support
   enable_classiclink               = var.enable_classiclink
   enable_classiclink_dns_support   = var.enable_classiclink_dns_support
-  assign_generated_ipv6_cidr_block = var.enable_ipv6
+  assign_generated_ipv6_cidr_block = var.ipv6_ipam_pool_id == null ? var.enable_ipv6 : null
+
+  ipv6_ipam_pool_id   = var.ipv6_ipam_pool_id
+  ipv6_netmask_length = var.ipv6_netmask_length
+  ipv4_ipam_pool_id   = var.ipv4_ipam_pool_id
+  ipv4_netmask_length = var.ipv4_netmask_length
 
   tags = merge(
     { "Name" = var.name },
     var.tags,
     var.vpc_tags,
   )
+
+  lifecycle {
+    ignore_changes = [
+      # seem to me a bug in aws side, vpc created with ipv6_ipam_pool_id be set to a pool id will become "IPAM Managed"
+      ipv6_ipam_pool_id
+    ]
+  }
 }
 
 resource "aws_vpc_ipv4_cidr_block_association" "this" {
@@ -359,7 +371,7 @@ resource "aws_subnet" "public" {
   map_public_ip_on_launch         = var.map_public_ip_on_launch
   assign_ipv6_address_on_creation = var.public_subnet_assign_ipv6_address_on_creation == null ? var.assign_ipv6_address_on_creation : var.public_subnet_assign_ipv6_address_on_creation
 
-  ipv6_cidr_block = var.enable_ipv6 && length(var.public_subnet_ipv6_prefixes) > 0 ? cidrsubnet(aws_vpc.this[0].ipv6_cidr_block, 8, var.public_subnet_ipv6_prefixes[count.index]) : null
+  ipv6_cidr_block = (var.enable_ipv6 || var.ipv6_ipam_pool_id != null) && length(var.public_subnet_ipv6_prefixes) > 0 ? cidrsubnet(aws_vpc.this[0].ipv6_cidr_block, 8, var.public_subnet_ipv6_prefixes[count.index]) : null
 
   tags = merge(
     {
@@ -386,7 +398,7 @@ resource "aws_subnet" "private" {
   availability_zone_id            = length(regexall("^[a-z]{2}-", element(var.azs, count.index))) == 0 ? element(var.azs, count.index) : null
   assign_ipv6_address_on_creation = var.private_subnet_assign_ipv6_address_on_creation == null ? var.assign_ipv6_address_on_creation : var.private_subnet_assign_ipv6_address_on_creation
 
-  ipv6_cidr_block = var.enable_ipv6 && length(var.private_subnet_ipv6_prefixes) > 0 ? cidrsubnet(aws_vpc.this[0].ipv6_cidr_block, 8, var.private_subnet_ipv6_prefixes[count.index]) : null
+  ipv6_cidr_block = (var.enable_ipv6 || var.ipv6_ipam_pool_id != null) && length(var.private_subnet_ipv6_prefixes) > 0 ? cidrsubnet(aws_vpc.this[0].ipv6_cidr_block, 8, var.private_subnet_ipv6_prefixes[count.index]) : null
 
   tags = merge(
     {
@@ -412,7 +424,7 @@ resource "aws_subnet" "outpost" {
   availability_zone               = var.outpost_az
   assign_ipv6_address_on_creation = var.outpost_subnet_assign_ipv6_address_on_creation == null ? var.assign_ipv6_address_on_creation : var.outpost_subnet_assign_ipv6_address_on_creation
 
-  ipv6_cidr_block = var.enable_ipv6 && length(var.outpost_subnet_ipv6_prefixes) > 0 ? cidrsubnet(aws_vpc.this[0].ipv6_cidr_block, 8, var.outpost_subnet_ipv6_prefixes[count.index]) : null
+  ipv6_cidr_block = (var.enable_ipv6 || var.ipv6_ipam_pool_id != null) && length(var.outpost_subnet_ipv6_prefixes) > 0 ? cidrsubnet(aws_vpc.this[0].ipv6_cidr_block, 8, var.outpost_subnet_ipv6_prefixes[count.index]) : null
 
   outpost_arn = var.outpost_arn
 
@@ -441,7 +453,7 @@ resource "aws_subnet" "database" {
   availability_zone_id            = length(regexall("^[a-z]{2}-", element(var.azs, count.index))) == 0 ? element(var.azs, count.index) : null
   assign_ipv6_address_on_creation = var.database_subnet_assign_ipv6_address_on_creation == null ? var.assign_ipv6_address_on_creation : var.database_subnet_assign_ipv6_address_on_creation
 
-  ipv6_cidr_block = var.enable_ipv6 && length(var.database_subnet_ipv6_prefixes) > 0 ? cidrsubnet(aws_vpc.this[0].ipv6_cidr_block, 8, var.database_subnet_ipv6_prefixes[count.index]) : null
+  ipv6_cidr_block = (var.enable_ipv6 || var.ipv6_ipam_pool_id != null) && length(var.database_subnet_ipv6_prefixes) > 0 ? cidrsubnet(aws_vpc.this[0].ipv6_cidr_block, 8, var.database_subnet_ipv6_prefixes[count.index]) : null
 
   tags = merge(
     {
@@ -484,7 +496,7 @@ resource "aws_subnet" "redshift" {
   availability_zone_id            = length(regexall("^[a-z]{2}-", element(var.azs, count.index))) == 0 ? element(var.azs, count.index) : null
   assign_ipv6_address_on_creation = var.redshift_subnet_assign_ipv6_address_on_creation == null ? var.assign_ipv6_address_on_creation : var.redshift_subnet_assign_ipv6_address_on_creation
 
-  ipv6_cidr_block = var.enable_ipv6 && length(var.redshift_subnet_ipv6_prefixes) > 0 ? cidrsubnet(aws_vpc.this[0].ipv6_cidr_block, 8, var.redshift_subnet_ipv6_prefixes[count.index]) : null
+  ipv6_cidr_block = (var.enable_ipv6 || var.ipv6_ipam_pool_id != null) && length(var.redshift_subnet_ipv6_prefixes) > 0 ? cidrsubnet(aws_vpc.this[0].ipv6_cidr_block, 8, var.redshift_subnet_ipv6_prefixes[count.index]) : null
 
   tags = merge(
     {
@@ -525,7 +537,7 @@ resource "aws_subnet" "elasticache" {
   availability_zone_id            = length(regexall("^[a-z]{2}-", element(var.azs, count.index))) == 0 ? element(var.azs, count.index) : null
   assign_ipv6_address_on_creation = var.elasticache_subnet_assign_ipv6_address_on_creation == null ? var.assign_ipv6_address_on_creation : var.elasticache_subnet_assign_ipv6_address_on_creation
 
-  ipv6_cidr_block = var.enable_ipv6 && length(var.elasticache_subnet_ipv6_prefixes) > 0 ? cidrsubnet(aws_vpc.this[0].ipv6_cidr_block, 8, var.elasticache_subnet_ipv6_prefixes[count.index]) : null
+  ipv6_cidr_block = (var.enable_ipv6 || var.ipv6_ipam_pool_id != null) && length(var.elasticache_subnet_ipv6_prefixes) > 0 ? cidrsubnet(aws_vpc.this[0].ipv6_cidr_block, 8, var.elasticache_subnet_ipv6_prefixes[count.index]) : null
 
   tags = merge(
     {
@@ -566,7 +578,7 @@ resource "aws_subnet" "intra" {
   availability_zone_id            = length(regexall("^[a-z]{2}-", element(var.azs, count.index))) == 0 ? element(var.azs, count.index) : null
   assign_ipv6_address_on_creation = var.intra_subnet_assign_ipv6_address_on_creation == null ? var.assign_ipv6_address_on_creation : var.intra_subnet_assign_ipv6_address_on_creation
 
-  ipv6_cidr_block = var.enable_ipv6 && length(var.intra_subnet_ipv6_prefixes) > 0 ? cidrsubnet(aws_vpc.this[0].ipv6_cidr_block, 8, var.intra_subnet_ipv6_prefixes[count.index]) : null
+  ipv6_cidr_block = (var.enable_ipv6 || var.ipv6_ipam_pool_id != null) && length(var.intra_subnet_ipv6_prefixes) > 0 ? cidrsubnet(aws_vpc.this[0].ipv6_cidr_block, 8, var.intra_subnet_ipv6_prefixes[count.index]) : null
 
   tags = merge(
     {
