@@ -20,7 +20,7 @@ locals {
 resource "aws_vpc" "this" {
   count = local.create_vpc ? 1 : 0
 
-  cidr_block                       = var.ipv4_netmask_length == null ? var.cidr : null
+  cidr_block                       = var.cidr
   instance_tenancy                 = var.instance_tenancy
   enable_dns_hostnames             = var.enable_dns_hostnames
   enable_dns_support               = var.enable_dns_support
@@ -28,10 +28,8 @@ resource "aws_vpc" "this" {
   enable_classiclink_dns_support   = var.enable_classiclink_dns_support
   assign_generated_ipv6_cidr_block = var.ipv6_ipam_pool_id == null ? var.enable_ipv6 : null
 
-  ipv6_ipam_pool_id   = var.ipv6_ipam_pool_id
-  ipv6_netmask_length = var.ipv6_netmask_length
-  ipv4_ipam_pool_id   = var.ipv4_ipam_pool_id
-  ipv4_netmask_length = var.ipv4_netmask_length
+  ipv6_ipam_pool_id = var.ipv6_ipam_pool_id
+  ipv6_cidr_block   = try(var.ipv6_cidrs[0], null)
 
   tags = merge(
     { "Name" = var.name },
@@ -48,12 +46,21 @@ resource "aws_vpc" "this" {
 }
 
 resource "aws_vpc_ipv4_cidr_block_association" "this" {
-  count = local.create_vpc && length(var.secondary_cidr_blocks) > 0 ? length(var.secondary_cidr_blocks) : 0
+  for_each = length() > 1 ? toset(slice(var.ipv6_cidrs, 1, length(var.ipv6_cidr))) : []
+
+  # Do not turn this into `local.vpc_id`
+  vpc_id            = aws_vpc.this[0].id
+  ipv6_ipam_pool_id = var.ipv6_ipam_pool_id
+  cidr_block        = each.value
+}
+
+resource "aws_vpc_ipv6_cidr_block_association" "ipv6" {
+  count = local.create_vpc && length(var.secondary_ipv6_cidr_blocks) > 0 ? length(var.secondary_ipv6_cidr_blocks) : 0
 
   # Do not turn this into `local.vpc_id`
   vpc_id = aws_vpc.this[0].id
 
-  cidr_block = element(var.secondary_cidr_blocks, count.index)
+  ipv6_cidr_block = element(var.secondary_ipv6_cidr_blocks, count.index)
 }
 
 resource "aws_default_security_group" "this" {
