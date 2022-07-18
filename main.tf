@@ -46,21 +46,21 @@ resource "aws_vpc" "this" {
 }
 
 resource "aws_vpc_ipv4_cidr_block_association" "this" {
-  for_each = length() > 1 ? toset(slice(var.ipv6_cidrs, 1, length(var.ipv6_cidr))) : []
-
-  # Do not turn this into `local.vpc_id`
-  vpc_id            = aws_vpc.this[0].id
-  ipv6_ipam_pool_id = var.ipv6_ipam_pool_id
-  cidr_block        = each.value
-}
-
-resource "aws_vpc_ipv6_cidr_block_association" "ipv6" {
-  count = local.create_vpc && length(var.secondary_ipv6_cidr_blocks) > 0 ? length(var.secondary_ipv6_cidr_blocks) : 0
+  count = local.create_vpc && length(var.secondary_cidr_blocks) > 0 ? length(var.secondary_cidr_blocks) : 0
 
   # Do not turn this into `local.vpc_id`
   vpc_id = aws_vpc.this[0].id
 
-  ipv6_cidr_block = element(var.secondary_ipv6_cidr_blocks, count.index)
+  cidr_block = element(var.secondary_cidr_blocks, count.index)
+}
+
+resource "aws_vpc_ipv6_cidr_block_association" "ipv6" {
+  count = local.create_vpc && length(var.ipv6_cidrs) > 1 ? length(var.ipv6_cidrs) - 1 : 0
+
+  # Do not turn this into `local.vpc_id`
+  vpc_id            = aws_vpc.this[0].id
+  ipv6_ipam_pool_id = var.ipv6_ipam_pool_id
+  ipv6_cidr_block   = element(var.ipv6_cidrs, 1 + count.index)
 }
 
 resource "aws_default_security_group" "this" {
