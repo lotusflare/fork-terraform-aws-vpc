@@ -33,7 +33,7 @@ resource "aws_vpc" "this" {
   ipv4_ipam_pool_id   = var.ipv4_ipam_pool_id
   ipv4_netmask_length = var.ipv4_netmask_length
 
-  assign_generated_ipv6_cidr_block     = var.enable_ipv6 && !var.use_ipam_pool ? true : null
+  assign_generated_ipv6_cidr_block     = local.assign_aws_managed_ipv6_cidr_block
   ipv6_cidr_block                      = var.ipv6_cidr
   ipv6_ipam_pool_id                    = var.ipv6_ipam_pool_id
   ipv6_netmask_length                  = var.ipv6_netmask_length
@@ -49,6 +49,14 @@ resource "aws_vpc" "this" {
     var.tags,
     var.vpc_tags,
   )
+
+  lifecycle {
+    ignore_changes = [
+      # seem to me a bug in aws side, vpc created with ipv6_ipam_pool_id be set to a pool id will become "IPAM Managed"
+      # https://discuss.hashicorp.com/t/error-on-second-apply-of-aws-vpc-with-ipv6-ipam-pool-id/46293
+      ipv6_ipam_pool_id
+    ]
+  }
 }
 
 resource "aws_vpc_ipv4_cidr_block_association" "this" {
